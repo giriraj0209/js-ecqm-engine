@@ -61,8 +61,9 @@ config.validate({ allowed: 'strict' });
 
 const rabbitURL = `amqp://${config.get('rabbitmq.host')}:${config.get('rabbitmq.port')}`;
 const cypressDB = `cypress_${env}${config.get('cypress.test_num')}`;
+const popHealthDB = `pophealth-development`;
 const mongoURL = `mongodb://${config.get('mongodb.host')}` +
-                 `:${config.get('mongodb.port')}/${cypressDB}`;
+                 `:${config.get('mongodb.port')}/${popHealthDB}`;
 
 const operation = retry.operation({
   retries: 5,
@@ -104,7 +105,7 @@ operation.attempt(() => {
 
       ch.consume(q, (msg) => {
         const messageJSON = JSON.parse(msg.content.toString());
-        // console.log(messageJSON);
+        //console.log(messageJSON);
         try {
           if (messageJSON.type === 'async') {
             executor.execute(
@@ -125,6 +126,8 @@ operation.attempt(() => {
               }
             );
           } else if (messageJSON.type === 'sync') {
+            const atr = messageJSON.options
+            const mopt = messageJSON.options;
             executor.execute(
               messageJSON.patient_ids,
               messageJSON.measure_ids,
