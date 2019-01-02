@@ -5,6 +5,16 @@ const mongoose = require('mongoose');
 const convict = require('convict');
 const retry = require('retry');
 
+const fs = require('fs');
+const util = require('util');
+var log_file = fs.createWriteStream('/tmp/debug.log', {flags : 'w'});
+var log_stdout = process.stdout;
+
+console.log = function(d) { //
+  log_file.write(util.format(d) + '\n');
+  log_stdout.write(util.format(d) + '\n');
+};
+
 const config = convict({
   env: {
     doc: 'The application environment',
@@ -60,10 +70,14 @@ const env = config.get('env');
 config.validate({ allowed: 'strict' });
 
 const rabbitURL = `amqp://${config.get('rabbitmq.host')}:${config.get('rabbitmq.port')}`;
+console.log("rabbitURL is ");
+console.log(rabbitURL);
 const cypressDB = `cypress_${env}${config.get('cypress.test_num')}`;
 const popHealthDB = `pophealth-development`;
 const mongoURL = `mongodb://${config.get('mongodb.host')}` +
                  `:${config.get('mongodb.port')}/${popHealthDB}`;
+console.log("mongodb");
+console.log(mongoURL);
 
 const operation = retry.operation({
   retries: 5,
@@ -74,17 +88,20 @@ const operation = retry.operation({
 operation.attempt(() => {
   amqp.connect(rabbitURL, (err, conn) => {
     if (operation.retry(err)) {
+      console.log("error connecting to rabbitmq");
       console.error('No rabbitMQ connection possible, retrying...');
       return;
     }
 
     if (!conn) {
+      console.log("No RabbitMQ connection could be made. Please check your RabbitMQ Server/connection settings");
       console.error('No RabbitMQ connection could be made. Please check your RabbitMQ Server/connection settings');
       return;
     }
 
     conn.createChannel((chErr, ch) => {
       if (operation.retry(chErr)) {
+        console.log("Error connecting to channel, retrying...");
         console.error('Error connecting to channel, retrying...');
         return;
       }
@@ -100,12 +117,13 @@ operation.attempt(() => {
       process.on('close', conn.close);
 
       const executor = new Executor(connection);
-
+      console.log("Waiting for messages....");
       console.log(' [*] Waiting for messages in %s. To exit press CTRL+C', q);
 
       ch.consume(q, (msg) => {
         const messageJSON = JSON.parse(msg.content.toString());
-        //console.log(messageJSON);
+        console.log(messageJSON);
+        console.log(messageJSON.type);
         try {
           if (messageJSON.type === 'async') {
             executor.execute(
@@ -126,8 +144,11 @@ operation.attempt(() => {
               }
             );
           } else if (messageJSON.type === 'sync') {
-            const atr = messageJSON.options
+            console.log("inside sync messages");
+            const atr = messageJSON.options;
             const mopt = messageJSON.options;
+            console.log(messageJSON.patient_ids);
+            console.log(messageJSON.measure_ids);
             executor.execute(
               messageJSON.patient_ids,
               messageJSON.measure_ids,
